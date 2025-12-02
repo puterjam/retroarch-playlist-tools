@@ -1,0 +1,131 @@
+{
+  "cores": {
+    "Nintendo - Nintendo Entertainment System": {
+      "core_name": "nestopia_libretro",
+      "extensions": [".nes", ".fds", ".unf", ".unif"],
+      "db_name": "Nintendo - Nintendo Entertainment System.rdb"
+    },
+    "Nintendo - Super Nintendo Entertainment System": {
+      "core_name": "snes9x_libretro",
+      "extensions": [".smc", ".sfc", ".swc", ".fig"],
+      "db_name": "Nintendo - Super Nintendo Entertainment System.rdb"
+    },
+    "Nintendo - Game Boy": {
+      "core_name": "gambatte_libretro",
+      "extensions": [".gb", ".gbc", ".dmg"],
+      "db_name": "Nintendo - Game Boy.rdb"
+    },
+    "Nintendo - Game Boy Color": {
+      "core_name": "gambatte_libretro",
+      "extensions": [".gbc", ".gb"],
+      "db_name": "Nintendo - Game Boy Color.rdb"
+    },
+    "Nintendo - Game Boy Advance": {
+      "core_name": "mgba_libretro",
+      "extensions": [".gba", ".agb"],
+      "db_name": "Nintendo - Game Boy Advance.rdb"
+    },
+    "Nintendo - Nintendo 64": {
+      "core_name": "mupen64plus_next_libretro",
+      "extensions": [".n64", ".z64", ".v64"],
+      "db_name": "Nintendo - Nintendo 64.rdb"
+    },
+    "Nintendo - GameCube": {
+      "core_name": "dolphin_libretro",
+      "extensions": [".gcm", ".iso", ".gcz"],
+      "db_name": "Nintendo - GameCube.rdb"
+    },
+    "Nintendo - Wii": {
+      "core_name": "dolphin_libretro",
+      "extensions": [".iso", ".wbfs", ".wad"],
+      "db_name": "Nintendo - Wii.rdb"
+    },
+    "Nintendo - Nintendo DS": {
+      "core_name": "desmume_libretro",
+      "extensions": [".nds"],
+      "db_name": "Nintendo - Nintendo DS.rdb"
+    },
+    "Nintendo - Nintendo 3DS": {
+      "core_name": "citra_libretro",
+      "extensions": [".3ds", ".3dsx", ".cia"],
+      "db_name": "Nintendo - Nintendo 3DS.rdb"
+    },
+    "Sega - Master System - Mark III": {
+      "core_name": "genesis_plus_gx_libretro",
+      "extensions": [".sms"],
+      "db_name": "Sega - Master System - Mark III.rdb"
+    },
+    "Sega - Mega Drive - Genesis": {
+      "core_name": "genesis_plus_gx_libretro",
+      "extensions": [".md", ".smd", ".gen", ".bin"],
+      "db_name": "Sega - Mega Drive - Genesis.rdb"
+    },
+    "Sega - Game Gear": {
+      "core_name": "genesis_plus_gx_libretro",
+      "extensions": [".gg"],
+      "db_name": "Sega - Game Gear.rdb"
+    },
+    "Sega - Saturn": {
+      "core_name": "mednafen_saturn_libretro",
+      "extensions": [".cue", ".bin", ".chd"],
+      "db_name": "Sega - Saturn.rdb"
+    },
+    "Sega - Dreamcast": {
+      "core_name": "flycast_libretro",
+      "extensions": [".cdi", ".gdi", ".chd"],
+      "db_name": "Sega - Dreamcast.rdb"
+    },
+    "Sony - PlayStation": {
+      "core_name": "pcsx_rearmed_libretro",
+      "extensions": [".cue", ".bin", ".img", ".chd", ".pbp"],
+      "db_name": "Sony - PlayStation.rdb"
+    },
+    "Sony - PlayStation 2": {
+      "core_name": "pcsx2_libretro",
+      "extensions": [".iso", ".bin", ".chd"],
+      "db_name": "Sony - PlayStation 2.rdb"
+    },
+    "Sony - PlayStation Portable": {
+      "core_name": "ppsspp_libretro",
+      "extensions": [".iso", ".cso", ".pbp"],
+      "db_name": "Sony - PlayStation Portable.rdb"
+    },
+    "SNK - Neo Geo": {
+      "core_name": "fbneo_libretro",
+      "extensions": [".zip", ".7z"],
+      "db_name": "SNK - Neo Geo.rdb"
+    },
+    "MAME": {
+      "core_name": "mame_libretro",
+      "extensions": [".zip", ".7z"],
+      "db_name": "MAME.rdb"
+    },
+    "FBNeo - Arcade Games": {
+      "core_name": "fbneo_libretro",
+      "extensions": [".zip", ".7z"],
+      "db_name": "FBNeo - Arcade Games.rdb"
+    }
+  },
+  "fetch_sources": {
+    "retroarch_db": {
+      "enabled": true,
+      "base_url": "https://github.com/libretro/libretro-database/raw/master/rdb"
+    },
+    "libretro_thumbnails": {
+      "enabled": true,
+      "base_url": "http://thumbnails.libretro.com"
+    },
+    "launchbox": {
+      "enabled": true,
+      "base_url": "https://gamesdb.launchbox-app.com",
+      "api_key": ""
+    }
+  },
+  "scan_options": {
+    "recursive": true,
+    "calculate_crc32": true,
+    "match_hack_versions": true,
+    "download_thumbnails": true,
+    "create_playlists": true
+  }
+}

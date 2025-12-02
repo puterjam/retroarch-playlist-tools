@@ -1,0 +1,4 @@
+# RetroArch Toolkit Requirements
+
+# Optional: For 7z file support
+py7zr>=0.20.0
