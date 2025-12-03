@@ -1,4 +1,4 @@
-# RetroArch Toolkit
+# retroarch playlist creator (mac only)
 
 一个强大的 Python 工具，用于规范化和美化 RetroArch 本地 ROM 资源和 playlist。
 
