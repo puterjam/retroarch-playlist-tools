@@ -66,6 +66,22 @@ class ROMScanner:
             for ext in supported_extensions:
                 rom_files.extend(scan_path.glob(f"*{ext}"))
 
+        # Filter out macOS temporary files (._filename) and hidden files
+        rom_files_filtered = []
+        skipped_count = 0
+        for rom_file in rom_files:
+            filename = rom_file.name
+            # Skip files starting with ._ (AppleDouble format)
+            # Skip files starting with . (hidden files)
+            if filename.startswith('._') or (filename.startswith('.') and not filename.startswith('..')):
+                skipped_count += 1
+                continue
+            rom_files_filtered.append(rom_file)
+
+        if skipped_count > 0:
+            print(f"Skipped {skipped_count} temporary/hidden file(s)")
+
+        rom_files = rom_files_filtered
         print(f"Found {len(rom_files)} ROM files")
 
         # Process each ROM
