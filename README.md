@@ -40,6 +40,29 @@
    - 支持多个游戏数据库源
    - 自定义插件开发接口
 
+## 主要命令
+
+```
+usage: main.py [-h] {init,scan,match,playlist,download-db,download-thumbnails,config} ...
+
+RetroArch Playlist Creator - Manage playlists and ROM collections
+
+positional arguments:
+  {init,scan,match,playlist,download-db,download-thumbnails,config}
+                        Available commands
+    init                Initialize RetroArch configuration
+    scan                Scan ROM directory and match against database
+    match               Interactively match unmatched ROMs from unknown_games.json
+    playlist            Generate RetroArch playlists
+    download-db         Download RetroArch databases
+    download-thumbnails
+                        Download game thumbnails
+    config              Manage configuration
+
+options:
+  -h, --help            show this help message and exit
+```
+
 ## 支持的系统
 
 目前支持以下游戏系统：

@@ -428,7 +428,7 @@ def cmd_config(args):
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
-        description="RetroArch Toolkit - Manage playlists and ROM collections",
+        description="RetroArch Playlist Creator - Manage playlists and ROM collections",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
