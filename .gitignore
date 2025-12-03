@@ -48,3 +48,6 @@ scan_results.json
 
 # submodule
 deps/rom-name-cn/*
+
+manual_matches.json
+unknown_games.json
