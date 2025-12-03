@@ -1,0 +1,3 @@
+[submodule "deps/rom-name-cn"]
+	path = deps/rom-name-cn
+	url = https://github.com/yingw/rom-name-cn.git

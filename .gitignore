@@ -45,3 +45,6 @@ scan_results.json
 # Cache
 .cache/
 *.cache
+
+# submodule
+deps/rom-name-cn/*

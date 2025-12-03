@@ -9,6 +9,7 @@ from typing import List, Dict
 from urllib.parse import quote
 
 from .models import ROMInfo
+from .chinese_name_mapper import ChineseNameMapper
 
 
 class PlaylistGenerator:
@@ -22,6 +23,7 @@ class PlaylistGenerator:
         """
         self.config = config
         self.manual_matches = self._load_manual_matches()
+        self.chinese_mapper = ChineseNameMapper()
 
     def _load_manual_matches(self) -> Dict:
         """Load manual matches from manual_matches.json
@@ -116,6 +118,15 @@ class PlaylistGenerator:
                 else:
                     display_name = rom.normalized_name
 
+                # Try to get Chinese name from CSV
+                # chinese_name = self.chinese_mapper.get_chinese_name(rom.system, display_name)
+                # if chinese_name:
+                    # Use Chinese name as label
+                    # label = chinese_name
+                # else:
+                    # Fall back to English name
+                label = display_name
+
                 # Determine CRC32 (priority: manual matched_crc > rom.crc32)
                 if manual_match and manual_match.get('matched_crc'):
                     crc32 = manual_match['matched_crc']
@@ -130,7 +141,7 @@ class PlaylistGenerator:
                 # Build playlist entry
                 entry = {
                     "path": runtime_path,
-                    "label": display_name,
+                    "label": label,
                     "core_path": "DETECT",  # Let RetroArch detect the core
                     "core_name": core_config["core_name"],
                     "crc32": crc32,
