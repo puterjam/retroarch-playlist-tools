@@ -5,6 +5,7 @@ A tool for managing RetroArch playlists and ROM collections
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -19,16 +20,26 @@ def cmd_init(args):
     retroarch_path = args.path
 
     if not retroarch_path:
-        retroarch_path = input("Enter RetroArch installation path: ").strip()
+        retroarch_path = input("Enter RetroArch installation path (local working directory): ").strip()
 
     if not retroarch_path:
         print("Error: RetroArch path is required")
         return 1
 
-    if config.init_retroarch_path(retroarch_path):
+    # Ask for runtime path
+    runtime_roms_path = args.runtime_path
+    if not runtime_roms_path and not args.no_runtime:
+        print("\nOptional: Enter runtime ROMs path for playlists")
+        print("(Leave empty to use the same as local path)")
+        print("Example for Switch: /retroarch/roms")
+        runtime_roms_path = input("Runtime ROMs path: ").strip()
+
+    if config.init_retroarch_path(retroarch_path, runtime_roms_path or None):
         print(f"\nRetroArch Toolkit initialized successfully!")
         print(f"RetroArch path: {config.get('retroarch_path')}")
-        print(f"ROMs path: {config.get('roms_path')}")
+        print(f"ROMs path (local): {config.get('roms_path')}")
+        if config.get('roms_path_runtime') != config.get('roms_path'):
+            print(f"ROMs path (runtime): {config.get('roms_path_runtime')}")
         print(f"Playlists path: {config.get('playlists_path')}")
         print(f"Thumbnails path: {config.get('thumbnails_path')}")
         print(f"\nConfiguration saved to: {config.config_path}")
@@ -39,7 +50,7 @@ def cmd_init(args):
 
 
 def cmd_scan(args):
-    """Scan ROM directory"""
+    """Scan ROM directory and match against database"""
     config = Config()
 
     if not config.is_initialized():
@@ -53,16 +64,48 @@ def cmd_scan(args):
         if rom_info:
             print(f"[{current}/{total}] Found: {rom_info.filename} ({rom_info.system})")
 
-    # Scan ROMs
+    # Scan path
     scan_path = args.path if args.path else None
     calculate_crc = not args.no_crc
 
+    print("\n" + "=" * 60)
+    print("STEP 1: Scanning ROMs")
+    print("=" * 60)
+
+    # Scan ROMs
     roms = scanner.scan(
         path=scan_path,
         recursive=args.recursive,
         calculate_crc=calculate_crc,
         progress_callback=show_progress if args.verbose else None
     )
+
+    if not roms:
+        print("No ROMs found!")
+        return 1
+
+    print("\n" + "=" * 60)
+    print("STEP 2: Matching ROMs to Database")
+    print("=" * 60)
+
+    # Match ROMs to database
+    matcher = ROMMatcher(config)
+    matched, total = matcher.match_all_roms(roms)
+
+    # Check for missing databases
+    if matcher.has_missing_databases():
+        missing = matcher.get_missing_databases()
+        print("\n⚠️  WARNING: Missing databases for systems:")
+        for system in missing:
+            print(f"  - {system}")
+        print("\nRun 'download-db' command to download missing databases:")
+        print("  python main.py download-db")
+
+    # Save unmatched ROMs to unknown_games.json
+    unmatched = scanner.get_unmatched_roms()
+    if unmatched:
+        scanner.save_unmatched_roms(unmatched)
+        print(f"\n💡 Use 'match' command to interactively fix {len(unmatched)} unmatched ROM(s)")
 
     # Print summary
     scanner.print_summary()
@@ -75,47 +118,53 @@ def cmd_scan(args):
 
 
 def cmd_match(args):
-    """Match ROMs to game database"""
+    """Interactively match unmatched ROMs from unknown_games.json"""
     config = Config()
 
     if not config.is_initialized():
         print("Error: RetroArch Toolkit not initialized. Run 'init' command first.")
         return 1
 
-    # First scan ROMs
-    scanner = ROMScanner(config)
-    print("Scanning ROMs...")
-    roms = scanner.scan(calculate_crc=True)
-
-    if not roms:
-        print("No ROMs found")
+    # Load unknown games
+    unknown_db_path = Path(config.get("unknown_games_db"))
+    if not unknown_db_path.exists():
+        print("No unknown games found. Run 'scan' command first.")
         return 1
 
-    # Match ROMs to database
+    with open(unknown_db_path, 'r', encoding='utf-8') as f:
+        unknown_games = json.load(f)
+
+    if not unknown_games:
+        print("No unmatched games to fix.")
+        return 0
+
+    # Load manual matches to avoid duplicates
+    manual_matches_path = Path(config.get("manual_matches_db", "manual_matches.json"))
+    already_matched = set()
+    if manual_matches_path.exists():
+        with open(manual_matches_path, 'r', encoding='utf-8') as f:
+            already_matched = set(json.load(f).keys())
+
+    # Create matcher
     matcher = ROMMatcher(config)
 
-    matched, total = matcher.match_all_roms(roms)
+    print(f"\nFound {len(unknown_games)} unmatched ROM(s)")
+    print(f"Already fixed: {len(already_matched)} ROM(s)")
 
-    # Show unmatched ROMs
-    unmatched = matcher.get_unmatched_roms()
-    if unmatched and args.verbose:
-        print("\nUnmatched ROMs:")
-        for rom in unmatched:
-            print(f"  - {rom.filename} ({rom.system})")
+    # Filter out already matched ROMs
+    remaining_games = {k: v for k, v in unknown_games.items() if k not in already_matched}
 
-            if args.similar:
-                # Show similar games
-                similar = matcher.find_similar_games(rom, limit=3)
-                if similar:
-                    print("    Similar games:")
-                    for game, score in similar:
-                        print(f"      {game.get('name', 'Unknown')} ({score:.2%})")
+    if not remaining_games:
+        print("\nAll unknown games have already been fixed!")
+        return 0
 
-    # Save unknown games
-    if unmatched:
-        matcher.save_unknown_games()
+    print(f"Remaining to fix: {len(remaining_games)} ROM(s)\n")
 
-    return 0
+    # Start interactive matching shell
+    from toolkit.core.interactive_matcher import InteractiveMatcher
+
+    interactive_matcher = InteractiveMatcher(config, matcher, remaining_games, manual_matches_path)
+    return interactive_matcher.run()
 
 
 def cmd_playlist(args):
@@ -186,58 +235,108 @@ def cmd_download_db(args):
 
 
 def cmd_download_thumbnails(args):
-    """Download game thumbnails"""
+    """Download game thumbnails for LaunchBox matched games only"""
     config = Config()
 
     if not config.is_initialized():
         print("Error: RetroArch Toolkit not initialized. Run 'init' command first.")
         return 1
 
-    # Scan and match ROMs
-    scanner = ROMScanner(config)
-    print("Scanning ROMs...")
-    roms = scanner.scan(calculate_crc=True)
-
-    if not roms:
-        print("No ROMs found")
+    # Load manual matches to find LaunchBox matched games
+    manual_matches_path = Path(config.get("manual_matches_db", "manual_matches.json"))
+    if not manual_matches_path.exists():
+        print("No manual matches found. Run 'match' command first.")
         return 1
 
-    # Match ROMs to get proper names
-    print("\nMatching ROMs...")
-    matcher = ROMMatcher(config)
-    matcher.match_all_roms(roms)
+    with open(manual_matches_path, 'r', encoding='utf-8') as f:
+        manual_matches = json.load(f)
 
-    # Download thumbnails
+    # Filter only LaunchBox matched games
+    launchbox_games = {
+        crc: match for crc, match in manual_matches.items()
+        if match.get('source') == 'launchbox' and match.get('launchbox_id')
+    }
+
+    if not launchbox_games:
+        print("No LaunchBox matched games found.")
+        print("Use the 'match' command with online search to match games with LaunchBox.")
+        return 0
+
+    print(f"Found {len(launchbox_games)} LaunchBox matched game(s)")
+
+    # Initialize LaunchBox fetcher
     fetcher = BaseFetcher(config)
-    thumbnail_fetcher = fetcher.get_plugin("libretro_thumbnails")
+    launchbox = fetcher.get_plugin("launchbox")
 
-    if not thumbnail_fetcher:
-        print("Error: Thumbnail fetcher not available")
+    if not launchbox:
+        print("Error: LaunchBox fetcher not available")
         return 1
 
     output_dir = Path(config.get("thumbnails_path"))
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Group ROMs by system
-    systems = scanner.get_roms_by_system()
+    # Download thumbnails for each LaunchBox game
+    success_count = 0
+    failed_count = 0
+    total_images = 0
 
-    for system_name, system_roms in systems.items():
-        print(f"\nDownloading thumbnails for {system_name}...")
+    # Image types to download (RetroArch standard types)
+    image_types = ["box_front", "screenshot_title", "screenshot_gameplay"]
 
-        # Only download for matched ROMs
-        matched_roms = [rom for rom in system_roms if rom.matched and rom.game_name]
+    for crc, match in launchbox_games.items():
+        game_id = match.get('launchbox_id')
+        filename = match.get('filename', 'Unknown')
+        system = match.get('system', 'Unknown')
 
-        if not matched_roms:
-            print("  No matched ROMs, skipping")
-            continue
+        # Extract ROM filename without extension
+        rom_name = Path(filename).stem
 
-        game_names = [rom.game_name for rom in matched_roms]
-        thumbnail_fetcher.batch_download_thumbnails(
-            system=system_name,
-            game_names=game_names,
-            output_dir=output_dir
+        print(f"\nDownloading images for: {rom_name}")
+        print(f"  System: {system}")
+        print(f"  LaunchBox ID: {game_id}")
+
+        # Create system-specific output directory
+        system_output_dir = output_dir / system
+        system_output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Download all image types (using ROM filename)
+        result = launchbox.download_game_images(
+            game_id=game_id,
+            rom_filename=rom_name,
+            image_types=image_types,
+            output_dir=system_output_dir,
+            prefer_region="North America"
         )
 
+        if result.success:
+            paths = result.data.get('paths', {})
+            count = result.data.get('count', 0)
+            total_images += count
+
+            print(f"  ✓ Downloaded {count} image(s):")
+            if 'box_front' in paths:
+                print(f"    - Named_Boxarts/{rom_name}.png")
+            if 'screenshot_title' in paths:
+                print(f"    - Named_Titles/{rom_name}.png")
+            if 'screenshot_gameplay' in paths:
+                print(f"    - Named_Snaps/{rom_name}.png")
+
+            success_count += 1
+        else:
+            print(f"  ✗ Failed: {result.error}")
+            failed_count += 1
+
+    print(f"\n{'='*60}")
+    print(f"Thumbnail Download Summary")
+    print(f"{'='*60}")
+    print(f"Games processed: {len(launchbox_games)}")
+    print(f"Successful: {success_count}")
+    print(f"Failed: {failed_count}")
+    print(f"Total images downloaded: {total_images}")
+
     return 0
+
+
 
 
 def cmd_config(args):
@@ -286,20 +385,20 @@ def main():
 
     # Init command
     parser_init = subparsers.add_parser('init', help='Initialize RetroArch configuration')
-    parser_init.add_argument('path', nargs='?', help='RetroArch installation path')
+    parser_init.add_argument('path', nargs='?', help='RetroArch installation path (local working directory)')
+    parser_init.add_argument('-r', '--runtime-path', help='Runtime ROMs path for playlists (e.g., Switch mount point)')
+    parser_init.add_argument('--no-runtime', action='store_true', help='Skip runtime path configuration')
 
     # Scan command
-    parser_scan = subparsers.add_parser('scan', help='Scan ROM directory')
+    parser_scan = subparsers.add_parser('scan', help='Scan ROM directory and match against database')
     parser_scan.add_argument('-p', '--path', help='Path to scan (uses config roms_path if not specified)')
     parser_scan.add_argument('-r', '--recursive', action='store_true', default=True, help='Scan subdirectories')
     parser_scan.add_argument('--no-crc', action='store_true', help='Skip CRC32 calculation')
     parser_scan.add_argument('-o', '--output', help='Export scan results to JSON file')
     parser_scan.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
 
-    # Match command
-    parser_match = subparsers.add_parser('match', help='Match ROMs to game database')
-    parser_match.add_argument('-v', '--verbose', action='store_true', help='Show unmatched ROMs')
-    parser_match.add_argument('-s', '--similar', action='store_true', help='Show similar games for unmatched ROMs')
+    # Match command (interactive shell)
+    parser_match = subparsers.add_parser('match', help='Interactively match unmatched ROMs from unknown_games.json')
 
     # Playlist command
     parser_playlist = subparsers.add_parser('playlist', help='Generate RetroArch playlists')

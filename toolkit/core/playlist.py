@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Dict
 from urllib.parse import quote
 
-from .scanner import ROMInfo
+from .models import ROMInfo
 
 
 class PlaylistGenerator:
@@ -21,6 +21,25 @@ class PlaylistGenerator:
             config: Config instance
         """
         self.config = config
+        self.manual_matches = self._load_manual_matches()
+
+    def _load_manual_matches(self) -> Dict:
+        """Load manual matches from manual_matches.json
+
+        Returns:
+            Dictionary of manual matches keyed by CRC32
+        """
+        manual_matches_path = Path(self.config.get("manual_matches_db", "manual_matches.json"))
+
+        if not manual_matches_path.exists():
+            return {}
+
+        try:
+            with open(manual_matches_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Warning: Error loading manual matches: {e}")
+            return {}
 
     def generate_playlists(self, roms: List[ROMInfo], group_by_system: bool = True) -> Dict[str, str]:
         """Generate playlists for ROMs
@@ -84,16 +103,37 @@ class PlaylistGenerator:
                     print(f"Warning: No core configuration found for {rom.system}")
                     continue
 
-                # Determine display name
-                display_name = rom.game_name if rom.game_name else rom.normalized_name
+                # Check if there's a manual match for this ROM
+                manual_match = None
+                if rom.crc32 and rom.crc32 in self.manual_matches:
+                    manual_match = self.manual_matches[rom.crc32]
+
+                # Determine display name (priority: manual_match > rom.game_name > normalized_name)
+                if manual_match and manual_match.get('matched_name'):
+                    display_name = manual_match['matched_name']
+                elif rom.game_name:
+                    display_name = rom.game_name
+                else:
+                    display_name = rom.normalized_name
+
+                # Determine CRC32 (priority: manual matched_crc > rom.crc32)
+                if manual_match and manual_match.get('matched_crc'):
+                    crc32 = manual_match['matched_crc']
+                elif rom.crc32:
+                    crc32 = rom.crc32
+                else:
+                    crc32 = "DETECT"
+
+                # Convert local path to runtime path for playlist
+                runtime_path = self.config.get_runtime_rom_path(rom.path)
 
                 # Build playlist entry
                 entry = {
-                    "path": rom.path,
+                    "path": runtime_path,
                     "label": display_name,
                     "core_path": "DETECT",  # Let RetroArch detect the core
                     "core_name": core_config["core_name"],
-                    "crc32": rom.crc32 if rom.crc32 else "DETECT",
+                    "crc32": crc32,
                     "db_name": core_config.get("db_name", "")
                 }
 

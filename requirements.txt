@@ -1,4 +1,10 @@
 # RetroArch Toolkit Requirements
 
+# Interactive shell support
+prompt-toolkit>=3.0.0
+
+# Image processing (for thumbnail conversion)
+Pillow>=10.0.0
+
 # Optional: For 7z file support
 py7zr>=0.20.0

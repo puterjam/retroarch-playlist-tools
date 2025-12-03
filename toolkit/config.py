@@ -65,13 +65,15 @@ class Config:
         return {
             "retroarch_path": "",
             "roms_path": "",
+            "roms_path_runtime": "",  # Runtime path for playlist (e.g., Switch mount point)
             "playlists_path": "",
             "thumbnails_path": "",
             "database_path": "",
             "cores": system_defaults.get("cores", {}),
             "fetch_sources": system_defaults.get("fetch_sources", {}),
             "scan_options": system_defaults.get("scan_options", {}),
-            "unknown_games_db": "unknown_games.json"
+            "unknown_games_db": "unknown_games.json",
+            "manual_matches_db": "manual_matches.json"
         }
 
     def __init__(self, config_path: Optional[str] = None):
@@ -95,7 +97,12 @@ class Config:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
                     loaded_config = json.load(f)
                     # Merge with default config to ensure all keys exist
-                    return self._merge_configs(self.DEFAULT_CONFIG.copy(), loaded_config)
+                    merged = self._merge_configs(self.DEFAULT_CONFIG.copy(), loaded_config)
+                    # Always use cores and fetch_sources from cores.json (don't let user config override)
+                    system_defaults = self._load_system_defaults()
+                    merged['cores'] = system_defaults.get('cores', {})
+                    merged['fetch_sources'] = system_defaults.get('fetch_sources', {})
+                    return merged
             except json.JSONDecodeError as e:
                 print(f"Error loading config: {e}")
                 print("Using default configuration")
@@ -127,11 +134,13 @@ class Config:
             print(f"Error saving config: {e}")
             return False
 
-    def init_retroarch_path(self, retroarch_path: str) -> bool:
+    def init_retroarch_path(self, retroarch_path: str, runtime_roms_path: Optional[str] = None) -> bool:
         """Initialize RetroArch paths
 
         Args:
-            retroarch_path: Base RetroArch directory
+            retroarch_path: Base RetroArch directory (local/working directory)
+            runtime_roms_path: Runtime ROMs path for playlist (e.g., Switch mount point)
+                              If None, uses same as roms_path
 
         Returns:
             True if successful, False otherwise
@@ -150,12 +159,51 @@ class Config:
         self.config["thumbnails_path"] = str(retroarch_path / "thumbnails")
         self.config["database_path"] = str(retroarch_path / "database" / "rdb")
 
+        # Set runtime ROMs path (for playlist generation)
+        if runtime_roms_path:
+            self.config["roms_path_runtime"] = runtime_roms_path
+        else:
+            # If not specified, use same as roms_path
+            self.config["roms_path_runtime"] = self.config["roms_path"]
+
         # Create directories if they don't exist
         for path_key in ["roms_path", "playlists_path", "thumbnails_path", "database_path"]:
             path = Path(self.config[path_key])
             path.mkdir(parents=True, exist_ok=True)
 
         return self.save()
+
+    def get_runtime_rom_path(self, local_rom_path: str) -> str:
+        """Convert local ROM path to runtime path for playlist
+
+        Args:
+            local_rom_path: Local ROM file path
+
+        Returns:
+            Runtime ROM path for use in playlist
+        """
+        local_roms_path = self.config.get("roms_path", "")
+        runtime_roms_path = self.config.get("roms_path_runtime", "")
+
+        # If runtime path is not configured or same as local, return original
+        if not runtime_roms_path or runtime_roms_path == local_roms_path:
+            return local_rom_path
+
+        # Replace local roms path with runtime roms path
+        try:
+            local_path = Path(local_rom_path)
+            local_base = Path(local_roms_path)
+
+            # Get relative path from roms directory
+            relative_path = local_path.relative_to(local_base)
+
+            # Construct runtime path
+            runtime_path = Path(runtime_roms_path) / relative_path
+
+            return str(runtime_path).replace('\\', '/')  # Use forward slashes for cross-platform
+        except ValueError:
+            # If path is not relative to roms_path, return original
+            return local_rom_path
 
     def get(self, key: str, default=None):
         """Get configuration value
@@ -205,12 +253,25 @@ class Config:
             Core configuration dict or None if not found
         """
         extension = extension.lower()
+
+        # First pass: Try to find systems where this extension is the primary (first) extension
+        # This handles cases like .gbc which should match GBC, not GB
+        for system_name, core_config in self.config["cores"].items():
+            extensions = [ext.lower() for ext in core_config["extensions"]]
+            if extensions and extensions[0] == extension:
+                return {
+                    "system_name": system_name,
+                    **core_config
+                }
+
+        # Second pass: Fall back to any system that supports this extension
         for system_name, core_config in self.config["cores"].items():
             if extension in [ext.lower() for ext in core_config["extensions"]]:
                 return {
                     "system_name": system_name,
                     **core_config
                 }
+
         return None
 
     def get_all_extensions(self) -> List[str]:

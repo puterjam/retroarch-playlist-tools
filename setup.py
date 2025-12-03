@@ -18,6 +18,10 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/puterjam/retroarch-toolkit",
     packages=find_packages(),
+    package_data={
+        "": ["config/*.json", "config/libretro-core-info/*.info"],
+    },
+    include_package_data=True,
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: End Users/Desktop",
@@ -31,7 +35,7 @@ setup(
     ],
     python_requires=">=3.8",
     install_requires=[
-        # Core dependencies (none required, using stdlib only)
+        "prompt-toolkit>=3.0.0",  # For interactive matcher
     ],
     extras_require={
         "7z": ["py7zr>=0.20.0"],  # For 7z file support

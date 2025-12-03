@@ -4,36 +4,16 @@ Scans directories for ROM files
 """
 
 from pathlib import Path
-from typing import List, Dict, Optional, Callable
-from dataclasses import dataclass, asdict
+from typing import List, Dict, Optional, Callable, TYPE_CHECKING
 import json
 
 from .utils import calculate_crc32, normalize_rom_name, is_hack_version, extract_region_info, format_file_size
+from .models import ROMInfo
 
-
-@dataclass
-class ROMInfo:
-    """ROM file information"""
-    path: str
-    filename: str
-    system: str
-    extension: str
-    size: int
-    size_formatted: str
-    crc32: Optional[str] = None
-    normalized_name: str = ""
-    is_hack: bool = False
-    base_game_name: Optional[str] = None
-    region: Optional[str] = None
-    matched: bool = False
-    game_name: Optional[str] = None
-    release_year: Optional[int] = None
-    developer: Optional[str] = None
-    publisher: Optional[str] = None
-
-    def to_dict(self) -> Dict:
-        """Convert to dictionary"""
-        return asdict(self)
+# Use TYPE_CHECKING to avoid circular imports at runtime
+if TYPE_CHECKING:
+    from .matcher import ROMMatcher
+    from .playlist import PlaylistGenerator
 
 
 class ROMScanner:
@@ -47,6 +27,9 @@ class ROMScanner:
         """
         self.config = config
         self.roms: List[ROMInfo] = []
+        self.matcher: Optional[ROMMatcher] = None
+        self.playlist_generator: Optional[PlaylistGenerator] = None
+        self.unmatched_roms_file = Path(self.config.get("unknown_games_db", "unknown_games.json"))
 
     def scan(self, path: Optional[str] = None, recursive: bool = True,
              calculate_crc: bool = True, progress_callback: Optional[Callable] = None) -> List[ROMInfo]:
@@ -220,6 +203,136 @@ class ROMScanner:
             print(f"Error exporting scan results: {e}")
             return False
 
+    def scan_and_match(self, path: Optional[str] = None, recursive: bool = True,
+                      calculate_crc: bool = True, auto_match: bool = True,
+                      generate_playlists: bool = False,
+                      progress_callback: Optional[Callable] = None) -> bool:
+        """Unified scan, match, and playlist generation
+
+        Args:
+            path: Directory to scan (uses config roms_path if None)
+            recursive: Scan subdirectories
+            calculate_crc: Calculate CRC32 checksums
+            auto_match: Automatically match ROMs to database
+            generate_playlists: Generate playlists after matching
+            progress_callback: Optional callback function(current, total, rom_info)
+
+        Returns:
+            True if successful
+        """
+        # Step 1: Scan ROMs
+        print("\n" + "=" * 60)
+        print("STEP 1: Scanning ROMs")
+        print("=" * 60)
+
+        self.scan(path, recursive, calculate_crc, progress_callback)
+
+        if not self.roms:
+            print("No ROMs found!")
+            return False
+
+        # Step 2: Match to database (if requested)
+        if auto_match:
+            print("\n" + "=" * 60)
+            print("STEP 2: Matching to Database")
+            print("=" * 60)
+
+            # Import here to avoid circular dependency
+            from .matcher import ROMMatcher
+            self.matcher = ROMMatcher(self.config)
+            matched, total = self.matcher.match_all_roms(self.roms)
+
+            # Check for missing databases
+            if self.matcher.has_missing_databases():
+                missing = self.matcher.get_missing_databases()
+                print("\n⚠️  WARNING: Missing databases for systems:")
+                for system in missing:
+                    print(f"  - {system}")
+                print("\nRun 'download-db' command to download missing databases:")
+                print("  python main.py download-db")
+
+            # Save unmatched ROMs
+            unmatched = self.get_unmatched_roms()
+            if unmatched:
+                self.save_unmatched_roms(unmatched)
+
+        # Step 3: Generate playlists (if requested)
+        if generate_playlists:
+            print("\n" + "=" * 60)
+            print("STEP 3: Generating Playlists")
+            print("=" * 60)
+
+            # Import here to avoid circular dependency
+            from .playlist import PlaylistGenerator
+            self.playlist_generator = PlaylistGenerator(self.config)
+            playlists = self.playlist_generator.generate_playlists(
+                self.roms,
+                group_by_system=True
+            )
+
+            print(f"\n✓ Generated {len(playlists)} playlist(s)")
+
+        # Print final summary
+        self.print_summary()
+
+        return True
+
+    def save_unmatched_roms(self, unmatched_roms: List[ROMInfo]) -> bool:
+        """Save unmatched ROMs to temporary JSON file
+
+        Args:
+            unmatched_roms: List of unmatched ROM information
+
+        Returns:
+            True if successful
+        """
+        if not unmatched_roms:
+            return True
+
+        try:
+            # Load existing unmatched games if file exists
+            existing_data = {}
+            if self.unmatched_roms_file.exists():
+                with open(self.unmatched_roms_file, 'r', encoding='utf-8') as f:
+                    existing_data = json.load(f)
+
+            # Add new unmatched ROMs
+            for rom in unmatched_roms:
+                # Use CRC32 as key if available, otherwise use path
+                key = rom.crc32 if rom.crc32 else rom.path
+
+                if key not in existing_data:
+                    existing_data[key] = {
+                        'filename': rom.filename,
+                        'path': rom.path,
+                        'system': rom.system,
+                        'crc32': rom.crc32,
+                        'normalized_name': rom.normalized_name,
+                        'is_hack': rom.is_hack,
+                        'base_game_name': rom.base_game_name,
+                        'region': rom.region,
+                        'size': rom.size,
+                        'size_formatted': rom.size_formatted,
+                        # Fields for manual completion
+                        'manual_name': '',
+                        'manual_year': None,
+                        'manual_developer': '',
+                        'manual_publisher': '',
+                        'notes': ''
+                    }
+
+            # Save to file
+            with open(self.unmatched_roms_file, 'w', encoding='utf-8') as f:
+                json.dump(existing_data, f, indent=2, ensure_ascii=False)
+
+            print(f"\n📝 Saved {len(unmatched_roms)} unmatched ROMs to: {self.unmatched_roms_file}")
+            print("   You can manually edit this file to add game information")
+            return True
+
+        except Exception as e:
+            print(f"Error saving unmatched ROMs: {e}")
+            return False
+
     def print_summary(self):
         """Print scan summary"""
         print("\n" + "=" * 60)
@@ -245,6 +358,7 @@ class ROMScanner:
 
         unmatched = self.get_unmatched_roms()
         if unmatched:
-            print(f"\nUnmatched ROMs: {len(unmatched)}")
+            print(f"\n⚠️  Unmatched ROMs: {len(unmatched)}")
+            print(f"   Use 'python main.py match' to manually match games")
 
         print("=" * 60)
