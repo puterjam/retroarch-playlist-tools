@@ -147,6 +147,7 @@
     "calculate_crc32": true,
     "match_hack_versions": true,
     "download_thumbnails": true,
-    "create_playlists": true
+    "create_playlists": true,
+    "auto_rename": false
   }
 }

@@ -211,3 +211,67 @@ def sanitize_filename(filename: str) -> str:
     filename = filename.strip('. ')
 
     return filename
+
+
+def rename_rom(rom_info, new_name: str, dry_run: bool = False) -> Tuple[bool, Optional[str]]:
+    """Rename ROM file to new name
+
+    Args:
+        rom_info: ROMInfo object with current ROM information
+        new_name: New name for the ROM (without extension)
+        dry_run: If True, don't actually rename the file
+
+    Returns:
+        Tuple of (success, new_path or error_message)
+    """
+    try:
+        # Check if system is arcade-based (Neo Geo, MAME, FBNeo)
+        # These systems require specific ROM filenames and should not be renamed
+        arcade_systems = [
+            "SNK - Neo Geo",
+            "MAME",
+            "FBNeo - Arcade Games",
+            "Arcade"
+        ]
+
+        # Check if the ROM's system is in the arcade systems list
+        if rom_info.system in arcade_systems:
+            return False, f"Skipped: {rom_info.system} ROMs require specific filenames and cannot be renamed"
+
+        current_path = Path(rom_info.path)
+
+        # Check if file exists
+        if not current_path.exists():
+            return False, f"File not found: {current_path}"
+
+        # Sanitize the new name
+        safe_name = sanitize_filename(new_name)
+
+        # Create new filename with same extension
+        new_filename = f"{safe_name}{rom_info.extension}"
+        new_path = current_path.parent / new_filename
+
+        # Check if target already exists
+        if new_path.exists() and new_path != current_path:
+            return False, f"Target file already exists: {new_path}"
+
+        # Skip if the filename is already the same
+        if current_path == new_path:
+            return True, str(new_path)
+
+        if dry_run:
+            print(f"  [DRY RUN] Would rename: {current_path.name} -> {new_filename}")
+            return True, str(new_path)
+
+        # Perform the rename
+        current_path.rename(new_path)
+
+        # Update rom_info object
+        rom_info.path = str(new_path)
+        rom_info.filename = new_filename
+        rom_info.renamed = True
+
+        return True, str(new_path)
+
+    except Exception as e:
+        return False, f"Error renaming file: {e}"

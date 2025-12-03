@@ -90,7 +90,8 @@ def cmd_scan(args):
 
     # Match ROMs to database
     matcher = ROMMatcher(config)
-    matched, total = matcher.match_all_roms(roms)
+    auto_rename = args.auto_rename if hasattr(args, 'auto_rename') else config.get("scan_options.auto_rename", False)
+    matched, total = matcher.match_all_roms(roms, auto_rename=auto_rename)
 
     # Check for missing databases
     if matcher.has_missing_databases():
@@ -163,7 +164,8 @@ def cmd_match(args):
     # Start interactive matching shell
     from toolkit.core.interactive_matcher import InteractiveMatcher
 
-    interactive_matcher = InteractiveMatcher(config, matcher, remaining_games, manual_matches_path)
+    auto_rename = args.auto_rename if hasattr(args, 'auto_rename') else config.get("scan_options.auto_rename", False)
+    interactive_matcher = InteractiveMatcher(config, matcher, remaining_games, manual_matches_path, auto_rename=auto_rename)
     return interactive_matcher.run()
 
 
@@ -188,7 +190,8 @@ def cmd_playlist(args):
     if not args.no_match:
         print("\nMatching ROMs to database...")
         matcher = ROMMatcher(config)
-        matcher.match_all_roms(roms)
+        auto_rename = config.get("scan_options.auto_rename", False)
+        matcher.match_all_roms(roms, auto_rename=auto_rename)
 
     # Generate playlists
     print("\nGenerating playlists...")
@@ -235,14 +238,14 @@ def cmd_download_db(args):
 
 
 def cmd_download_thumbnails(args):
-    """Download game thumbnails for LaunchBox matched games only"""
+    """Download game thumbnails from LaunchBox first, fallback to libretro_thumbnails"""
     config = Config()
 
     if not config.is_initialized():
         print("Error: RetroArch Toolkit not initialized. Run 'init' command first.")
         return 1
 
-    # Load manual matches to find LaunchBox matched games
+    # Load manual matches
     manual_matches_path = Path(config.get("manual_matches_db", "manual_matches.json"))
     if not manual_matches_path.exists():
         print("No manual matches found. Run 'match' command first.")
@@ -251,86 +254,134 @@ def cmd_download_thumbnails(args):
     with open(manual_matches_path, 'r', encoding='utf-8') as f:
         manual_matches = json.load(f)
 
-    # Filter only LaunchBox matched games
-    launchbox_games = {
-        crc: match for crc, match in manual_matches.items()
-        if match.get('source') == 'launchbox' and match.get('launchbox_id')
-    }
-
-    if not launchbox_games:
-        print("No LaunchBox matched games found.")
-        print("Use the 'match' command with online search to match games with LaunchBox.")
+    if not manual_matches:
+        print("No matched games found.")
         return 0
 
-    print(f"Found {len(launchbox_games)} LaunchBox matched game(s)")
+    print(f"Found {len(manual_matches)} matched game(s)")
 
-    # Initialize LaunchBox fetcher
+    # Initialize fetchers
     fetcher = BaseFetcher(config)
     launchbox = fetcher.get_plugin("launchbox")
+    libretro_thumbnails = fetcher.get_plugin("libretro_thumbnails")
 
-    if not launchbox:
-        print("Error: LaunchBox fetcher not available")
+    if not libretro_thumbnails:
+        print("Error: Libretro thumbnails fetcher not available")
         return 1
 
     output_dir = Path(config.get("thumbnails_path"))
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download thumbnails for each LaunchBox game
+    # Download thumbnails for each matched game
     success_count = 0
     failed_count = 0
+    libretro_fallback_count = 0
     total_images = 0
 
     # Image types to download (RetroArch standard types)
-    image_types = ["box_front", "screenshot_title", "screenshot_gameplay"]
+    launchbox_image_types = ["box_front", "screenshot_title", "screenshot_gameplay"]
+    libretro_thumbnail_types = ["Named_Boxarts", "Named_Titles", "Named_Snaps"]
 
-    for crc, match in launchbox_games.items():
-        game_id = match.get('launchbox_id')
+    # Arcade systems that require specific ROM filenames
+    arcade_systems = [
+        "SNK - Neo Geo",
+        "MAME",
+        "FBNeo - Arcade Games",
+        "Arcade"
+    ]
+
+    for crc, match in manual_matches.items():
         filename = match.get('filename', 'Unknown')
         system = match.get('system', 'Unknown')
+        matched_name = match.get('matched_name', '')
 
         # Extract ROM filename without extension
         rom_name = Path(filename).stem
 
-        print(f"\nDownloading images for: {rom_name}")
+        # For arcade systems, use ROM filename as output; for others use matched_name
+        is_arcade = system in arcade_systems
+        thumbnail_output_name = rom_name if is_arcade else None
+
+        print(f"\nProcessing: {rom_name}")
         print(f"  System: {system}")
-        print(f"  LaunchBox ID: {game_id}")
+        if is_arcade:
+            print(f"  (Arcade system - using ROM filename for thumbnails)")
 
         # Create system-specific output directory
         system_output_dir = output_dir / system
         system_output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Download all image types (using ROM filename)
-        result = launchbox.download_game_images(
-            game_id=game_id,
-            rom_filename=rom_name,
-            image_types=image_types,
-            output_dir=system_output_dir,
-            prefer_region="North America"
-        )
+        game_success = False
+        downloaded_count = 0
 
-        if result.success:
-            paths = result.data.get('paths', {})
-            count = result.data.get('count', 0)
-            total_images += count
+        # Try LaunchBox first if available
+        if launchbox and match.get('source') == 'launchbox' and match.get('launchbox_id'):
+            game_id = match.get('launchbox_id')
+            print(f"  Trying LaunchBox (ID: {game_id})...")
 
-            print(f"  ✓ Downloaded {count} image(s):")
-            if 'box_front' in paths:
-                print(f"    - Named_Boxarts/{rom_name}.png")
-            if 'screenshot_title' in paths:
-                print(f"    - Named_Titles/{rom_name}.png")
-            if 'screenshot_gameplay' in paths:
-                print(f"    - Named_Snaps/{rom_name}.png")
+            result = launchbox.download_game_images(
+                game_id=game_id,
+                rom_filename=rom_name,
+                image_types=launchbox_image_types,
+                output_dir=system_output_dir,
+                prefer_region="North America"
+            )
 
+            if result.success:
+                paths = result.data.get('paths', {})
+                count = result.data.get('count', 0)
+                downloaded_count += count
+                total_images += count
+                game_success = True
+
+                print(f"  ✓ LaunchBox: Downloaded {count} image(s)")
+                if 'box_front' in paths:
+                    print(f"    - Named_Boxarts/{rom_name}.png")
+                if 'screenshot_title' in paths:
+                    print(f"    - Named_Titles/{rom_name}.png")
+                if 'screenshot_gameplay' in paths:
+                    print(f"    - Named_Snaps/{rom_name}.png")
+            else:
+                print(f"  ✗ LaunchBox failed: {result.error}")
+
+        # Fallback to libretro_thumbnails using matched_name
+        if not game_success and matched_name:
+            print(f"  Trying libretro_thumbnails (search: {matched_name})...")
+
+            for thumbnail_type in libretro_thumbnail_types:
+                type_output_dir = system_output_dir / thumbnail_type
+                result = libretro_thumbnails.download_thumbnail(
+                    system=system,
+                    game_name=matched_name,
+                    thumbnail_type=thumbnail_type,
+                    output_dir=type_output_dir,
+                    output_filename=thumbnail_output_name
+                )
+
+                if result.success:
+                    downloaded_count += 1
+                    total_images += 1
+                    game_success = True
+                    status = "cached" if result.cached else "downloaded"
+                    saved_as = thumbnail_output_name if thumbnail_output_name else matched_name
+                    print(f"  ✓ {thumbnail_type} ({status}) -> {saved_as}")
+
+            if game_success:
+                libretro_fallback_count += 1
+
+        if game_success:
             success_count += 1
         else:
-            print(f"  ✗ Failed: {result.error}")
+            print(f"  ✗ No thumbnails found from any source")
             failed_count += 1
 
     print(f"\n{'='*60}")
     print(f"Thumbnail Download Summary")
     print(f"{'='*60}")
-    print(f"Games processed: {len(launchbox_games)}")
+    print(f"Games processed: {len(manual_matches)}")
     print(f"Successful: {success_count}")
+    print(f"  - From LaunchBox: {success_count - libretro_fallback_count}")
+    print(f"  - From libretro_thumbnails: {libretro_fallback_count}")
     print(f"Failed: {failed_count}")
     print(f"Total images downloaded: {total_images}")
 
@@ -396,9 +447,11 @@ def main():
     parser_scan.add_argument('--no-crc', action='store_true', help='Skip CRC32 calculation')
     parser_scan.add_argument('-o', '--output', help='Export scan results to JSON file')
     parser_scan.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser_scan.add_argument('--auto-rename', action='store_true', help='Automatically rename matched ROMs to their game names')
 
     # Match command (interactive shell)
     parser_match = subparsers.add_parser('match', help='Interactively match unmatched ROMs from unknown_games.json')
+    parser_match.add_argument('--auto-rename', action='store_true', help='Automatically rename matched ROMs to their game names')
 
     # Playlist command
     parser_playlist = subparsers.add_parser('playlist', help='Generate RetroArch playlists')

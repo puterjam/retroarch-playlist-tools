@@ -54,7 +54,8 @@ class Config:
                 "calculate_crc32": True,
                 "match_hack_versions": True,
                 "download_thumbnails": True,
-                "create_playlists": True
+                "create_playlists": True,
+                "auto_rename": False
             }
         }
 

@@ -26,6 +26,7 @@ class ROMInfo:
     release_year: Optional[int] = None
     developer: Optional[str] = None
     publisher: Optional[str] = None
+    renamed: bool = False
 
     def to_dict(self) -> Dict:
         """Convert to dictionary"""

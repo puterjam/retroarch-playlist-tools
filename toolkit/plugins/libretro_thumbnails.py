@@ -35,7 +35,8 @@ class LibretroThumbnailsFetcher(FetchPlugin):
 
     def download_thumbnail(self, system: str, game_name: str,
                           thumbnail_type: str = "Named_Boxarts",
-                          output_dir: Optional[Path] = None) -> FetchResult:
+                          output_dir: Optional[Path] = None,
+                          output_filename: Optional[str] = None) -> FetchResult:
         """Download a game thumbnail
 
         Args:
@@ -43,6 +44,7 @@ class LibretroThumbnailsFetcher(FetchPlugin):
             game_name: Game name (must match database name)
             thumbnail_type: Type of thumbnail (Named_Boxarts, Named_Snaps, Named_Titles)
             output_dir: Output directory (uses cache if None)
+            output_filename: Override output filename (without extension)
 
         Returns:
             FetchResult with download status
@@ -62,12 +64,23 @@ class LibretroThumbnailsFetcher(FetchPlugin):
         # Sanitize game name for filename
         safe_game_name = self._sanitize_thumbnail_name(game_name)
 
+        # Use custom output filename if provided, otherwise use game name
+        output_file_base = output_filename if output_filename else safe_game_name
+
         # Try different image extensions
         extensions = [".png", ".jpg"]
 
         for ext in extensions:
-            filename = f"{safe_game_name}{ext}"
-            output_path = output_dir / filename
+            # Construct URL using the game_name (for searching in libretro)
+            search_filename = f"{safe_game_name}{ext}"
+            encoded_system = urllib.parse.quote(system)
+            encoded_type = urllib.parse.quote(thumbnail_type)
+            encoded_name = urllib.parse.quote(search_filename)
+            url = f"{self.base_url}/{encoded_system}/{encoded_type}/{encoded_name}"
+
+            # Save with custom filename
+            output_filename_full = f"{output_file_base}{ext}"
+            output_path = output_dir / output_filename_full
 
             # Check if already cached
             if output_path.exists():
@@ -81,14 +94,6 @@ class LibretroThumbnailsFetcher(FetchPlugin):
                     source=self.PLUGIN_NAME,
                     cached=True
                 )
-
-            # Construct download URL
-            # URL structure: http://thumbnails.libretro.com/{system}/{type}/{game_name}.{ext}
-            encoded_system = urllib.parse.quote(system)
-            encoded_type = urllib.parse.quote(thumbnail_type)
-            encoded_name = urllib.parse.quote(filename)
-
-            url = f"{self.base_url}/{encoded_system}/{encoded_type}/{encoded_name}"
 
             # Try to download
             if self.download_file(url, output_path):

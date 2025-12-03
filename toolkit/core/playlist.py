@@ -119,13 +119,13 @@ class PlaylistGenerator:
                     display_name = rom.normalized_name
 
                 # Try to get Chinese name from CSV
-                # chinese_name = self.chinese_mapper.get_chinese_name(rom.system, display_name)
-                # if chinese_name:
+                chinese_name = self.chinese_mapper.get_chinese_name(rom.system, display_name)
+                if chinese_name:
                     # Use Chinese name as label
-                    # label = chinese_name
-                # else:
+                    label = chinese_name
+                else:
                     # Fall back to English name
-                label = display_name
+                    label = display_name
 
                 # Determine CRC32 (priority: manual matched_crc > rom.crc32)
                 if manual_match and manual_match.get('matched_crc'):

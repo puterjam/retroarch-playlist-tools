@@ -10,6 +10,7 @@ from difflib import SequenceMatcher
 
 from .models import ROMInfo
 from .rdb_query import LibretroDBQuery
+from .utils import rename_rom
 
 
 class ROMMatcher:
@@ -235,22 +236,25 @@ class ROMMatcher:
 
         return best_match
 
-    def match_all_roms(self, roms: List[ROMInfo]) -> Tuple[int, int]:
+    def match_all_roms(self, roms: List[ROMInfo], auto_rename: bool = False) -> Tuple[int, int]:
         """Match all ROMs to database
 
         Args:
             roms: List of ROM information
+            auto_rename: Automatically rename matched ROMs to their game names
 
         Returns:
             Tuple of (matched_count, total_count)
         """
         matched = 0
         total = len(roms)
+        renamed_count = 0
+        skipped_arcade_count = 0
 
         print(f"Matching {total} ROMs to database...")
 
         # First, apply manual matches
-        manual_matched = self.apply_manual_matches(roms)
+        manual_matched = self.apply_manual_matches(roms, auto_rename)
         matched += manual_matched
 
         # Then try automatic matching for remaining ROMs
@@ -268,11 +272,27 @@ class ROMMatcher:
                 rom.developer = match.get('developer')
                 rom.publisher = match.get('publisher')
                 matched += 1
+
+                # Rename ROM file if auto_rename is enabled
+                if auto_rename and rom.game_name:
+                    success, result = rename_rom(rom, rom.game_name)
+                    if success:
+                        renamed_count += 1
+                    elif "require specific filenames" in result:
+                        # Count skipped arcade ROMs but don't print individual warnings
+                        skipped_arcade_count += 1
+                    else:
+                        print(f"  Warning: Failed to rename {rom.filename}: {result}")
             else:
                 # Add to unknown games list
                 self.unknown_games.append(rom)
 
         print(f"Matched {matched}/{total} ROMs ({matched/total*100:.1f}%)")
+        if auto_rename:
+            if renamed_count > 0:
+                print(f"Renamed {renamed_count} ROM files")
+            if skipped_arcade_count > 0:
+                print(f"Skipped {skipped_arcade_count} arcade ROM(s) (arcade ROMs require specific filenames)")
         return matched, total
 
     def find_similar_games(self, rom_info: ROMInfo, limit: int = 5) -> List[Tuple[Dict, float]]:
@@ -456,6 +476,44 @@ class ROMMatcher:
             print(f"Error saving manual match: {e}")
             return False
 
+    def update_manual_match_paths(self, rom_crc32: str, new_path: str, new_filename: str) -> bool:
+        """Update path and filename in manual_matches.json after ROM rename
+
+        Args:
+            rom_crc32: CRC32 of the ROM
+            new_path: New file path
+            new_filename: New filename
+
+        Returns:
+            True if successful
+        """
+        manual_matches_path = Path(self.config.get("manual_matches_db", "manual_matches.json"))
+
+        try:
+            if not manual_matches_path.exists():
+                return False
+
+            # Load existing matches
+            with open(manual_matches_path, 'r', encoding='utf-8') as f:
+                existing_matches = json.load(f)
+
+            # Update path and filename if this CRC exists
+            if rom_crc32 in existing_matches:
+                existing_matches[rom_crc32]['path'] = new_path
+                existing_matches[rom_crc32]['filename'] = new_filename
+
+                # Save to file
+                with open(manual_matches_path, 'w', encoding='utf-8') as f:
+                    json.dump(existing_matches, f, indent=2, ensure_ascii=False)
+
+                return True
+
+            return False
+
+        except Exception as e:
+            print(f"Error updating manual match paths: {e}")
+            return False
+
     def interactive_match_rom(self, rom_info: ROMInfo, limit: int = 10) -> Optional[Dict]:
         """Interactive fuzzy matching for a ROM
 
@@ -572,11 +630,12 @@ class ROMMatcher:
                 except ValueError:
                     print("Please enter a number")
 
-    def apply_manual_matches(self, roms: List[ROMInfo]) -> int:
+    def apply_manual_matches(self, roms: List[ROMInfo], auto_rename: bool = False) -> int:
         """Apply manual matches to ROMs
 
         Args:
             roms: List of ROM information
+            auto_rename: Automatically rename matched ROMs to their game names
 
         Returns:
             Number of ROMs matched from manual_matches.json
@@ -587,6 +646,8 @@ class ROMMatcher:
             return 0
 
         matched_count = 0
+        renamed_count = 0
+        skipped_arcade_count = 0
 
         for rom in roms:
             if rom.matched:
@@ -605,7 +666,25 @@ class ROMMatcher:
 
                 matched_count += 1
 
+                # Rename ROM file if auto_rename is enabled
+                if auto_rename and rom.game_name:
+                    success, result = rename_rom(rom, rom.game_name)
+                    if success:
+                        renamed_count += 1
+                        # Update manual_matches.json with new path and filename
+                        self.update_manual_match_paths(rom.crc32, rom.path, rom.filename)
+                    elif "require specific filenames" in result:
+                        # Count skipped arcade ROMs but don't print individual warnings
+                        skipped_arcade_count += 1
+                    else:
+                        print(f"  Warning: Failed to rename {rom.filename}: {result}")
+
         if matched_count > 0:
             print(f"Applied {matched_count} manual matches")
+            if auto_rename:
+                if renamed_count > 0:
+                    print(f"  Renamed {renamed_count} ROM files from manual matches")
+                if skipped_arcade_count > 0:
+                    print(f"  Skipped {skipped_arcade_count} arcade ROM(s) from manual matches")
 
         return matched_count

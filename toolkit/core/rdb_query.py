@@ -185,7 +185,6 @@ class LibretroDBQuery:
         """
         query = f"{{'name':glob('{name_pattern}')}}"
         output = self._run_command(Path(db_path), "find", query)
-
         return self._parse_output(output)
 
     def find_by_release_date(self, db_path: Union[str, Path],

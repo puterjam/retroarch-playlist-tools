@@ -17,12 +17,13 @@ from prompt_toolkit.styles import Style
 
 from .models import ROMInfo
 from .matcher import ROMMatcher
+from .utils import rename_rom
 
 
 class InteractiveMatcher:
     """Interactive shell for matching unmatched ROMs"""
 
-    def __init__(self, config, matcher: ROMMatcher, unknown_games: Dict, manual_matches_path: Path):
+    def __init__(self, config, matcher: ROMMatcher, unknown_games: Dict, manual_matches_path: Path, auto_rename: bool = False):
         """Initialize interactive matcher
 
         Args:
@@ -30,15 +31,18 @@ class InteractiveMatcher:
             matcher: ROMMatcher instance
             unknown_games: Dictionary of unknown games from unknown_games.json
             manual_matches_path: Path to manual_matches.json
+            auto_rename: Automatically rename matched ROMs to their game names
         """
         self.config = config
         self.matcher = matcher
         self.unknown_games = unknown_games
         self.manual_matches_path = manual_matches_path
+        self.auto_rename = auto_rename
         self.current_index = 0
         self.games_list = list(unknown_games.items())
         self.fixed_count = 0
         self.skipped_count = 0
+        self.renamed_count = 0
         self._processed_roms = set()  # Track processed ROM indices
 
         # Create prompt session
@@ -254,6 +258,21 @@ class InteractiveMatcher:
                     # Show success message briefly
                     print("\n✓ Saved: {} -> {}".format(rom.filename, result.get('name')))
                     self.fixed_count += 1
+
+                    # Rename ROM file if auto_rename is enabled
+                    if self.auto_rename and result.get('name'):
+                        # Update rom with matched name for rename
+                        rom.game_name = result.get('name')
+                        success, rename_result = rename_rom(rom, result.get('name'))
+                        if success:
+                            print("  ✓ Renamed to: {}".format(rom.filename))
+                            self.renamed_count += 1
+
+                            # Update manual_matches.json with new path and filename
+                            self.matcher.update_manual_match_paths(crc, rom.path, rom.filename)
+                        elif "require specific filenames" not in rename_result:
+                            print("  ⚠️  Rename failed: {}".format(rename_result))
+
                     # Pause briefly to show success
                     time.sleep(0.5)
                 else:
@@ -620,6 +639,8 @@ class InteractiveMatcher:
         print("=" * 60)
         print("Fixed:   {}".format(self.fixed_count))
         print("Skipped: {}".format(self.skipped_count))
+        if self.auto_rename and self.renamed_count > 0:
+            print("Renamed: {}".format(self.renamed_count))
         print("Total:   {}".format(len(self.games_list)))
         print()
         print("Manual matches: {}".format(self.manual_matches_path))

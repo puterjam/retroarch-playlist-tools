@@ -240,7 +240,8 @@ class ROMScanner:
             # Import here to avoid circular dependency
             from .matcher import ROMMatcher
             self.matcher = ROMMatcher(self.config)
-            matched, total = self.matcher.match_all_roms(self.roms)
+            auto_rename = self.config.get("scan_options.auto_rename", False)
+            matched, total = self.matcher.match_all_roms(self.roms, auto_rename=auto_rename)
 
             # Check for missing databases
             if self.matcher.has_missing_databases():
