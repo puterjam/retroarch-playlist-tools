@@ -63,6 +63,7 @@ class Config:
     def DEFAULT_CONFIG(self) -> dict:
         """Get default configuration with system defaults loaded from file"""
         system_defaults = self._load_system_defaults()
+        # Data directory paths will be set in _load_config
         return {
             "retroarch_path": "",
             "roms_path": "",
@@ -72,9 +73,7 @@ class Config:
             "database_path": "",
             "cores": system_defaults.get("cores", {}),
             "fetch_sources": system_defaults.get("fetch_sources", {}),
-            "scan_options": system_defaults.get("scan_options", {}),
-            "unknown_games_db": "unknown_games.json",
-            "manual_matches_db": "manual_matches.json"
+            "scan_options": system_defaults.get("scan_options", {})
         }
 
     def __init__(self, config_path: Optional[str] = None):
@@ -89,6 +88,9 @@ class Config:
             config_path = config_dir / "config.json"
 
         self.config_path = Path(config_path)
+        self.config_dir = self.config_path.parent
+        self.data_dir = self.config_dir / "data"
+        self.data_dir.mkdir(parents=True, exist_ok=True)
         self.config = self._load_config()
 
     def _load_config(self) -> Dict:
@@ -103,13 +105,22 @@ class Config:
                     system_defaults = self._load_system_defaults()
                     merged['cores'] = system_defaults.get('cores', {})
                     merged['fetch_sources'] = system_defaults.get('fetch_sources', {})
+                    # Set data file paths to data directory
+                    merged['unknown_games_db'] = str(self.data_dir / "unknown_games.json")
+                    merged['manual_matches_db'] = str(self.data_dir / "manual_matches.json")
                     return merged
             except json.JSONDecodeError as e:
                 print(f"Error loading config: {e}")
                 print("Using default configuration")
-                return self.DEFAULT_CONFIG.copy()
+                config = self.DEFAULT_CONFIG.copy()
+                config['unknown_games_db'] = str(self.data_dir / "unknown_games.json")
+                config['manual_matches_db'] = str(self.data_dir / "manual_matches.json")
+                return config
         else:
-            return self.DEFAULT_CONFIG.copy()
+            config = self.DEFAULT_CONFIG.copy()
+            config['unknown_games_db'] = str(self.data_dir / "unknown_games.json")
+            config['manual_matches_db'] = str(self.data_dir / "manual_matches.json")
+            return config
 
     def _merge_configs(self, base: Dict, override: Dict) -> Dict:
         """Recursively merge configurations"""

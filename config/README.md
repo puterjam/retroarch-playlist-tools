@@ -73,7 +73,7 @@ To add support for a new gaming system:
 
 3. **Test the configuration:**
    ```bash
-   python main.py download-db -l
+   rap download-db -l
    ```
 
 ## Configuration Loading

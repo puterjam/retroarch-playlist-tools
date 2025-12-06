@@ -266,7 +266,7 @@ class ROMScanner:
                 for system in missing:
                     print(f"  - {system}")
                 print("\nRun 'download-db' command to download missing databases:")
-                print("  python main.py download-db")
+                print("  rap download-db")
 
             # Save unmatched ROMs
             unmatched = self.get_unmatched_roms()
@@ -376,6 +376,6 @@ class ROMScanner:
         unmatched = self.get_unmatched_roms()
         if unmatched:
             print(f"\n⚠️  Unmatched ROMs: {len(unmatched)}")
-            print(f"   Use 'python main.py match' to manually match games")
+            print(f"   Use 'rap match' to manually match games")
 
         print("=" * 60)

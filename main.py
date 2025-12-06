@@ -100,7 +100,7 @@ def cmd_scan(args):
         for system in missing:
             print(f"  - {system}")
         print("\nRun 'download-db' command to download missing databases:")
-        print("  python main.py download-db")
+        print("  rap download-db")
 
     # Save unmatched ROMs to unknown_games.json
     unmatched = scanner.get_unmatched_roms()
@@ -428,7 +428,7 @@ def cmd_config(args):
 def main():
     """Main entry point"""
     parser = argparse.ArgumentParser(
-        description="RetroArch Playlist Creator - Manage playlists and ROM collections",
+        description="RetroArch Playlist Creator - Manage playlists and ROM collections by PuterJam",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
@@ -454,18 +454,22 @@ def main():
     parser_match.add_argument('--auto-rename', action='store_true', help='Automatically rename matched ROMs to their game names')
 
     # Playlist command
-    parser_playlist = subparsers.add_parser('playlist', help='Generate RetroArch playlists')
+    parser_playlist = subparsers.add_parser('build', help='Generate RetroArch playlists')
     parser_playlist.add_argument('--no-match', action='store_true', help='Skip database matching')
     parser_playlist.add_argument('--single', action='store_true', help='Create single playlist for all ROMs')
 
-    # Download DB command
-    parser_db = subparsers.add_parser('download-db', help='Download RetroArch databases')
+    # Get command (with subcommands for db and thumbnails)
+    parser_get = subparsers.add_parser('get', help='Download resources (db, thumbnails)')
+    get_subparsers = parser_get.add_subparsers(dest='get_command', help='Resource to download')
+
+    # Get DB subcommand
+    parser_db = get_subparsers.add_parser('db', help='Download RetroArch databases')
     parser_db.add_argument('-l', '--list', action='store_true', help='List available databases')
     parser_db.add_argument('-s', '--systems', nargs='+', help='Systems to download (downloads all if not specified)')
     parser_db.add_argument('-o', '--output', help='Output directory')
 
-    # Download thumbnails command
-    parser_thumbnails = subparsers.add_parser('download-thumbnails', help='Download game thumbnails')
+    # Get thumbnails subcommand
+    parser_thumbnails = get_subparsers.add_parser('thumbnails', help='Download game thumbnails')
 
     # Config command
     parser_config = subparsers.add_parser('config', help='Manage configuration')
@@ -484,13 +488,23 @@ def main():
         'init': cmd_init,
         'scan': cmd_scan,
         'match': cmd_match,
-        'playlist': cmd_playlist,
-        'download-db': cmd_download_db,
-        'download-thumbnails': cmd_download_thumbnails,
+        'build': cmd_playlist,
         'config': cmd_config,
     }
 
-    command_func = commands.get(args.command)
+    # Handle 'get' command with subcommands
+    if args.command == 'get':
+        get_commands = {
+            'db': cmd_download_db,
+            'thumbnails': cmd_download_thumbnails,
+        }
+        if not args.get_command:
+            parser.parse_args(['get', '--help'])
+            return 0
+        command_func = get_commands.get(args.get_command)
+    else:
+        command_func = commands.get(args.command)
+
     if command_func:
         try:
             return command_func(args)

@@ -10,13 +10,13 @@ readme_file = Path(__file__).parent / "README.md"
 long_description = readme_file.read_text(encoding="utf-8") if readme_file.exists() else ""
 
 setup(
-    name="retroarch-toolkit",
+    name="retroarch-playlist-tools",
     version="1.0.0",
     author="RetroArch Toolkit Contributors",
     description="A tool for managing RetroArch playlists and ROM collections",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/puterjam/retroarch-toolkit",
+    url="https://github.com/puterjam/retroarch-playlist-tools",
     packages=find_packages(),
     package_data={
         "": ["config/*.json", "config/libretro-core-info/*.info"],
@@ -42,7 +42,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "retroarch-toolkit=main:main",
+            "rap=main:main",
         ],
     },
     py_modules=["main"],  # Include main.py as a top-level module

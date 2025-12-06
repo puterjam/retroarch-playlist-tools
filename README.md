@@ -43,20 +43,18 @@
 ## 主要命令
 
 ```
-usage: main.py [-h] {init,scan,match,playlist,download-db,download-thumbnails,config} ...
+usage: ./rap [-h] {init,scan,match,playlist,download-db,download-thumbnails,config} ...
 
-RetroArch Playlist Creator - Manage playlists and ROM collections
+RetroArch Playlist Creator - Manage playlists and ROM collections by PuterJam
 
 positional arguments:
-  {init,scan,match,playlist,download-db,download-thumbnails,config}
+  {init,scan,match,build,get,config}
                         Available commands
     init                Initialize RetroArch configuration
     scan                Scan ROM directory and match against database
     match               Interactively match unmatched ROMs from unknown_games.json
-    playlist            Generate RetroArch playlists
-    download-db         Download RetroArch databases
-    download-thumbnails
-                        Download game thumbnails
+    build               Generate RetroArch playlists
+    get                 Download resources (db, thumbnails)
     config              Manage configuration
 
 options:

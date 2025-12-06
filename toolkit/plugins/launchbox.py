@@ -66,7 +66,7 @@ class LaunchBoxFetcher(FetchPlugin):
 
             # Make request
             request = urllib.request.Request(api_url)
-            request.add_header('User-Agent', 'RetroArch-Toolkit/1.0')
+            request.add_header('User-Agent', 'Retroarch-Playlist-Tools/1.0')
             request.add_header('Accept', 'application/json')
 
             with urllib.request.urlopen(request, timeout=15) as response:
